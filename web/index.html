@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Daily Flow — Task & Habit Tracker</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome for crisp native-style icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    },
+                    boxShadow: {
+                        'phone': '0 25px 50px -12px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(15, 23, 42, 0.08)',
+                        'card': '0 2px 10px -2px rgba(15, 23, 42, 0.05)',
+                        'fab': '0 10px 25px -5px rgba(79, 70, 229, 0.45)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom animations & native-feeling scrollbars */
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            overscroll-behavior-y: none;
+        }
+
+        /* Hide scrollbars cleanly while keeping scrollability */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Smooth checkbox bounce animation */
+        @keyframes checkPop {
+            0% { transform: scale(1); }
+            40% { transform: scale(0.85); }
+            75% { transform: scale(1.15); }
+            100% { transform: scale(1); }
+        }
+        .animate-check-pop {
+            animation: checkPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        /* Task entry fade-slide */
+        @keyframes slideUpFade {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .task-enter {
+            animation: slideUpFade 0.28s ease-out forwards;
+        }
+
+        /* Strikethrough animation */
+        .strike-text {
+            position: relative;
+            transition: color 0.25s ease;
+        }
+        .strike-text::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 52%;
+            width: 0;
+            height: 1.5px;
+            background-color: #94a3b8;
+            transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .strike-text.completed::after {
+            width: 100%;
+        }
+
+        /* Modal sheet slide-up */
+        .bottom-sheet {
+            transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+        }
+        .bottom-sheet.closed {
+            transform: translateY(100%);
+        }
+        .bottom-sheet.open {
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body class="bg-slate-200/80 text-slate-800 min-h-screen flex items-center justify-center sm:p-6 selection:bg-brand-100 selection:text-brand-700">
+
+    <!-- Phone Frame Container (Full screen on mobile, sleek iPhone-style frame on desktop) -->
+    <div id="app-shell" class="relative w-full h-[100dvh] sm:w-[400px] sm:h-[820px] sm:max-h-[92vh] bg-slate-50 sm:rounded-[44px] sm:border-[10px] sm:border-slate-900 shadow-phone flex flex-col overflow-hidden">
+
+        <!-- Desktop Top Dynamic Island / Speaker Notch -->
+        <div class="hidden sm:flex items-center justify-between px-7 pt-3 pb-1 bg-white text-[11px] font-semibold text-slate-800 select-none shrink-0">
+            <span id="status-time">9:41</span>
+            <div class="w-24 h-5 bg-slate-900 rounded-full flex items-center justify-end px-2">
+                <span class="w-2 h-2 rounded-full bg-indigo-950 border border-slate-700"></span>
+            </div>
+            <div class="flex items-center gap-1.5 text-slate-700">
+                <i class="fa-solid fa-signal text-[10px]"></i>
+                <i class="fa-solid fa-wifi text-[10px]"></i>
+                <i class="fa-solid fa-battery-full text-xs"></i>
+            </div>
+        </div>
+
+        <!-- App Header & Daily Progress Bar -->
+        <header class="bg-white px-5 pt-4 pb-4 border-b border-slate-100 shrink-0 z-10">
+            <div class="flex items-center justify-between mb-3">
+                <div>
+                    <p id="current-date" class="text-xs font-medium text-slate-400 uppercase tracking-wider">Today</p>
+                    <h1 class="text-xl font-bold text-slate-900 tracking-tight">My Daily Flow</h1>
+                </div>
+                <button id="clear-completed-btn" title="Clear Completed Tasks" class="text-xs font-semibold text-slate-500 hover:text-rose-600 active:scale-95 transition-all bg-slate-100 hover:bg-rose-50 px-3 py-2 rounded-xl flex items-center gap-1.5">
+                    <i class="fa-regular fa-trash-can"></i>
+                    <span>Clean Up</span>
+                </button>
+            </div>
+
+            <!-- Progress Card -->
+            <div class="bg-gradient-to-br from-brand-600 to-indigo-700 rounded-2xl p-4 text-white shadow-sm">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-medium text-indigo-100">Daily Progress</span>
+                    <span id="progress-label" class="text-xs font-bold bg-white/20 px-2.5 py-0.5 rounded-full">0% Done</span>
+                </div>
+                <!-- Animated Progress Track -->
+                <div class="w-full h-2.5 bg-indigo-950/40 rounded-full overflow-hidden mb-2">
+                    <div id="progress-bar" class="h-full bg-emerald-400 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
+                </div>
+                <p id="progress-subtitle" class="text-[11px] text-indigo-100/90">Let's build momentum today!</p>
+            </div>
+        </header>
+
+        <!-- Scrollable Main Content -->
+        <main class="flex-1 overflow-y-auto no-scrollbar px-5 pt-4 pb-28 space-y-6">
+
+            <!-- Daily Habits Section -->
+            <section aria-label="Daily Habits">
+                <div class="flex items-center justify-between mb-2.5">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Daily Habits</h2>
+                    <button id="open-habit-modal-btn" class="text-xs font-semibold text-brand-600 hover:text-brand-700 active:scale-95 transition flex items-center gap-1 py-1 px-2 rounded-lg hover:bg-brand-50">
+                        <i class="fa-solid fa-plus text-[10px]"></i> Add Habit
+                    </button>
+                </div>
+
+                <!-- Horizontal Swipeable Habit Pills -->
+                <div id="habits-container" class="flex gap-2.5 overflow-x-auto no-scrollbar pb-1">
+                    <!-- Habits injected via JS -->
+                </div>
+            </section>
+
+            <!-- Category Filter Tabs -->
+            <section aria-label="Task Categories">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Today's Tasks</h2>
+                    <span id="task-counter" class="text-xs font-medium text-slate-400">0 left</span>
+                </div>
+
+                <div id="category-tabs" class="grid grid-cols-4 gap-1.5 bg-slate-200/70 p-1 rounded-2xl mb-4">
+                    <button data-category="All" class="cat-tab active-tab py-2 text-xs font-semibold rounded-xl bg-white text-slate-900 shadow-xs transition-all">All</button>
+                    <button data-category="Personal" class="cat-tab py-2 text-xs font-semibold rounded-xl text-slate-500 hover:text-slate-800 transition-all">Personal</button>
+                    <button data-category="Work" class="cat-tab py-2 text-xs font-semibold rounded-xl text-slate-500 hover:text-slate-800 transition-all">Work</button>
+                    <button data-category="Health" class="cat-tab py-2 text-xs font-semibold rounded-xl text-slate-500 hover:text-slate-800 transition-all">Health</button>
+                </div>
+
+                <!-- Task List Container -->
+                <div id="tasks-container" class="space-y-2.5">
+                    <!-- Tasks injected via JS -->
+                </div>
+
+                <!-- Empty State -->
+                <div id="empty-state" class="hidden flex-col items-center justify-center text-center py-12 px-4">
+                    <div class="w-14 h-14 rounded-2xl bg-brand-50 text-brand-500 flex items-center justify-center text-2xl mb-3">
+                        <i class="fa-solid fa-check-double"></i>
+                    </div>
+                    <h3 class="text-sm font-bold text-slate-800 mb-1">All caught up!</h3>
+                    <p class="text-xs text-slate-400 max-w-[220px]">Tap the + button below to add a new task for your day.</p>
+                </div>
+            </section>
+        </main>
+
+        <!-- Floating Action Button (FAB) -->
+        <button id="open-task-modal-btn" aria-label="Add New Task" class="absolute bottom-6 right-5 w-14 h-14 rounded-2xl bg-brand-600 hover:bg-brand-700 active:scale-90 text-white shadow-fab flex items-center justify-center text-xl transition-all z-20">
+            <i class="fa-solid fa-plus"></i>
+        </button>
+
+        <!-- Toast Notification Banner -->
+        <div id="toast" class="pointer-events-none absolute bottom-24 left-1/2 -translate-x-1/2 bg-slate-900/95 text-white text-xs font-medium px-4 py-2.5 rounded-full shadow-lg opacity-0 transition-opacity duration-200 z-40 whitespace-nowrap">
+            Task saved
+        </div>
+
+        <!-- Backdrop Overlay for Bottom Sheets -->
+        <div id="modal-backdrop" class="hidden absolute inset-0 bg-slate-900/40 backdrop-blur-[2px] z-30 transition-opacity"></div>
+
+        <!-- Bottom Sheet: Add New Task -->
+        <div id="task-modal" class="bottom-sheet closed absolute inset-x-0 bottom-0 bg-white rounded-t-3xl p-6 shadow-2xl z-40">
+            <div class="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4"></div>
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-base font-bold text-slate-900">New Task</h3>
+                <button type="button" class="close-modal-btn w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:text-slate-800 flex items-center justify-center">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+
+            <form id="task-form" class="space-y-4">
+                <div>
+                    <label for="task-title" class="block text-xs font-semibold text-slate-600 mb-1.5">What do you need to do?</label>
+                    <input type="text" id="task-title" placeholder="e.g., Finish quarterly report" required maxlength="80"
+                        class="w-full px-4 py-3 text-sm bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition">
+                </div>
+
+                <!-- Category Selector -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1.5">Category</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <label class="cursor-pointer">
+                            <input type="radio" name="task-category" value="Personal" class="peer sr-only" checked>
+                            <div class="text-center py-2.5 px-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 peer-checked:border-brand-600 peer-checked:bg-brand-50 peer-checked:text-brand-700 transition">
+                                <i class="fa-regular fa-user mr-1"></i> Personal
+                            </div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="task-category" value="Work" class="peer sr-only">
+                            <div class="text-center py-2.5 px-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 peer-checked:border-sky-600 peer-checked:bg-sky-50 peer-checked:text-sky-700 transition">
+                                <i class="fa-solid fa-briefcase mr-1"></i> Work
+                            </div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="task-category" value="Health" class="peer sr-only">
+                            <div class="text-center py-2.5 px-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 peer-checked:border-emerald-600 peer-checked:bg-emerald-50 peer-checked:text-emerald-700 transition">
+                                <i class="fa-solid fa-heart-pulse mr-1"></i> Health
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Priority Selector -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1.5">Priority Level</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <label class="cursor-pointer">
+                            <input type="radio" name="task-priority" value="Low" class="peer sr-only">
+                            <div class="text-center py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 peer-checked:border-slate-700 peer-checked:bg-slate-800 peer-checked:text-white transition">
+                                Low
+                            </div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="task-priority" value="Medium" class="peer sr-only" checked>
+                            <div class="text-center py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 peer-checked:border-amber-500 peer-checked:bg-amber-500 peer-checked:text-white transition">
+                                Medium
+                            </div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="task-priority" value="High" class="peer sr-only">
+                            <div class="text-center py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 peer-checked:border-rose-600 peer-checked:bg-rose-600 peer-checked:text-white transition">
+                                High
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full py-3.5 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white text-sm font-bold rounded-2xl shadow-md transition">
+                    Save Task
+                </button>
+            </form>
+        </div>
+
+        <!-- Bottom Sheet: Add New Habit -->
+        <div id="habit-modal" class="bottom-sheet closed absolute inset-x-0 bottom-0 bg-white rounded-t-3xl p-6 shadow-2xl z-40">
+            <div class="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4"></div>
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-base font-bold text-slate-900">New Daily Habit</h3>
+                <button type="button" class="close-modal-btn w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:text-slate-800 flex items-center justify-center">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+
+            <form id="habit-form" class="space-y-4">
+                <div>
+                    <label for="habit-title" class="block text-xs font-semibold text-slate-600 mb-1.5">Habit Name</label>
+                    <input type="text" id="habit-title" placeholder="e.g., Drink 8 glasses of water" required maxlength="32"
+                        class="w-full px-4 py-3 text-sm bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1.5">Choose Icon</label>
+                    <div class="grid grid-cols-5 gap-2">
+                        <label class="cursor-pointer">
+                            <input type="radio" name="habit-icon" value="fa-droplet" class="peer sr-only" checked>
+                            <div class="py-3 rounded-xl border border-slate-200 flex items-center justify-center text-slate-600 peer-checked:border-brand-600 peer-checked:bg-brand-50 peer-checked:text-brand-600 transition">
+                                <i class="fa-solid fa-droplet"></i>
+                            </div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="habit-icon" value="fa-person-running" class="peer sr-only">
+                            <div class="py-3 rounded-xl border border-slate-200 flex items-center justify-center text-slate-600 peer-checked:border-brand-600 peer-checked:bg-brand-50 peer-checked:text-brand-600 transition">
+                                <i class="fa-solid fa-person-running"></i>
+                            </div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="habit-icon" value="fa-book-open" class="peer sr-only">
+                            <div class="py-3 rounded-xl border border-slate-200 flex items-center justify-center text-slate-600 peer-checked:border-brand-600 peer-checked:bg-brand-50 peer-checked:text-brand-600 transition">
+                                <i class="fa-solid fa-book-open"></i>
+                            </div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="habit-icon" value="fa-spa" class="peer sr-only">
+                            <div class="py-3 rounded-xl border border-slate-200 flex items-center justify-center text-slate-600 peer-checked:border-brand-600 peer-checked:bg-brand-50 peer-checked:text-brand-600 transition">
+                                <i class="fa-solid fa-spa"></i>
+                            </div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="habit-icon" value="fa-bed" class="peer sr-only">
+                            <div class="py-3 rounded-xl border border-slate-200 flex items-center justify-center text-slate-600 peer-checked:border-brand-600 peer-checked:bg-brand-50 peer-checked:text-brand-600 transition">
+                                <i class="fa-solid fa-bed"></i>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full py-3.5 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white text-sm font-bold rounded-2xl shadow-md transition">
+                    Add Habit
+                </button>
+            </form>
+        </div>
+
+        <!-- Bottom Home Indicator Bar (Desktop Frame Visual) -->
+        <div class="hidden sm:flex justify-center pb-2 pt-1 bg-slate-50 shrink-0">
+            <div class="w-32 h-1 bg-slate-300 rounded-full"></div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * Daily Flow — Mobile-First Task & Habit Tracker
+         * Complete localStorage state management, smooth animations, and touch-first UX.
+         */
+        (function () {
+            const STORAGE_KEY = 'daily_flow_app_state_v1';
+
+            // Default starter data for first-time visitors
+            const defaultState = {
+                lastSavedDate: new Date().toDateString(),
+                activeCategory: 'All',
+                habits: [
+                    { id: 'h1', title: 'Drink Water', icon: 'fa-droplet', completed: true, streak: 4 },
+                    { id: 'h2', title: '20m Walk', icon: 'fa-person-running', completed: false, streak: 2 },
+                    { id: 'h3', title: 'Read 10 Pages', icon: 'fa-book-open', completed: false, streak: 6 }
+                ],
+                tasks: [
+                    { id: 't1', title: 'Review project timeline & goals', category: 'Work', priority: 'High', completed: false },
+                    { id: 't2', title: 'Prep healthy lunch for tomorrow', category: 'Health', priority: 'Medium', completed: true },
+                    { id: 't3', title: 'Call Mom to catch up', category: 'Personal', priority: 'Low', completed: false }
+                ]
+            };
+
+            let state = loadState();
+
+            // DOM Elements
+            const habitsContainer = document.getElementById('habits-container');
+            const tasksContainer = document.getElementById('tasks-container');
+            const emptyState = document.getElementById('empty-state');
+            const progressBar = document.getElementById('progress-bar');
+            const progressLabel = document.getElementById('progress-label');
+            const progressSubtitle = document.getElementById('progress-subtitle');
+            const taskCounter = document.getElementById('task-counter');
+            const currentDateEl = document.getElementById('current-date');
+            const statusTimeEl = document.getElementById('status-time');
+            const toastEl = document.getElementById('toast');
+
+            // Modals & Forms
+            const modalBackdrop = document.getElementById('modal-backdrop');
+            const taskModal = document.getElementById('task-modal');
+            const habitModal = document.getElementById('habit-modal');
+            const taskForm = document.getElementById('task-form');
+            const habitForm = document.getElementById('habit-form');
+
+            /**
+             * Load state from localStorage with safe fallback & automatic daily habit reset
+             */
+            function loadState() {
+                try {
+                    const raw = localStorage.getItem(STORAGE_KEY);
+                    if (!raw) return structuredClone(defaultState);
+                    const parsed = JSON.parse(raw);
+
+                    // Reset daily habits automatically when a new day starts
+                    const todayStr = new Date().toDateString();
+                    if (parsed.lastSavedDate !== todayStr) {
+                        parsed.habits = (parsed.habits || []).map(h => ({
+                            ...h,
+                            completed: false
+                        }));
+                        parsed.lastSavedDate = todayStr;
+                    }
+                    return parsed;
+                } catch (err) {
+                    console.error('Error reading localStorage:', err);
+                    return structuredClone(defaultState);
+                }
+            }
+
+            /**
+             * Save state cleanly to localStorage
+             */
+            function saveState() {
+                try {
+                    state.lastSavedDate = new Date().toDateString();
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+                } catch (err) {
+                    console.error('Error saving to localStorage:', err);
+                }
+            }
+
+            /**
+             * Update Header Date & Phone Status Clock
+             */
+            function updateDateTime() {
+                const now = new Date();
+                const dateOptions = { weekday: 'short', month: 'short', day: 'numeric' };
+                currentDateEl.textContent = now.toLocaleDateString('en-US', dateOptions);
+
+                const hours = now.getHours();
+                const minutes = String(now.getMinutes()).padStart(2, '0');
+                const formattedHours = hours % 12 || 12;
+                statusTimeEl.textContent = `${formattedHours}:${minutes}`;
+            }
+
+            /**
+             * Show subtle floating toast message
+             */
+            let toastTimer;
+            function showToast(message) {
+                toastEl.textContent = message;
+                toastEl.classList.remove('opacity-0');
+                clearTimeout(toastTimer);
+                toastTimer = setTimeout(() => {
+                    toastEl.classList.add('opacity-0');
+                }, 2000);
+            }
+
+            /**
+             * Calculate and render overall daily progress (Habits + Tasks)
+             */
+            function updateProgress() {
+                const totalItems = state.habits.length + state.tasks.length;
+                const completedHabits = state.habits.filter(h => h.completed).length;
+                const completedTasks = state.tasks.filter(t => t.completed).length;
+                const completedTotal = completedHabits + completedTasks;
+
+                const percent = totalItems === 0 ? 0 : Math.round((completedTotal / totalItems) * 100);
+
+                progressBar.style.width = `${percent}%`;
+                progressLabel.textContent = `${percent}% Done`;
+
+                if (totalItems === 0) {
+                    progressSubtitle.textContent = 'Add a task or habit to get started.';
+                } else if (percent === 100) {
+                    progressSubtitle.textContent = 'Amazing work! Everything is complete.';
+                } else if (percent >= 50) {
+                    progressSubtitle.textContent = `${completedTotal} of ${totalItems} completed — keep going!`;
+                } else {
+                    progressSubtitle.textContent = `${completedTotal} of ${totalItems} completed today`;
+                }
+            }
+
+            /**
+             * Render Daily Habits Row
+             */
+            function renderHabits() {
+                habitsContainer.innerHTML = '';
+
+                if (state.habits.length === 0) {
+                    habitsContainer.innerHTML = `
+                        <div class="w-full text-center py-4 px-3 bg-white rounded-2xl border border-dashed border-slate-200 text-xs text-slate-400">
+                            No daily habits yet. Tap "+ Add Habit" above.
+                        </div>
+                    `;
+                    return;
+                }
+
+                state.habits.forEach(habit => {
+                    const card = document.createElement('div');
+                    card.className = `group relative shrink-0 w-32 p-3.5 rounded-2xl border transition-all duration-200 cursor-pointer select-none active:scale-95 ${
+                        habit.completed
+                            ? 'bg-emerald-50/90 border-emerald-200 shadow-xs'
+                            : 'bg-white border-slate-100 shadow-card hover:border-slate-200'
+                    }`;
+
+                    card.innerHTML = `
+                        <div class="flex items-center justify-between mb-2.5">
+                            <div class="w-8 h-8 rounded-xl flex items-center justify-center text-sm transition-colors ${
+                                habit.completed
+                                    ? 'bg-emerald-500 text-white'
+                                    : 'bg-brand-50 text-brand-600'
+                            }">
+                                <i class="fa-solid ${habit.completed ? 'fa-check' : habit.icon}"></i>
+                            </div>
+                            <button type="button" data-delete-habit="${habit.id}" aria-label="Remove habit"
+                                class="w-6 h-6 rounded-full text-slate-300 hover:text-rose-500 hover:bg-rose-50 flex items-center justify-center text-[11px] transition">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                        <p class="text-xs font-bold truncate ${habit.completed ? 'text-emerald-900' : 'text-slate-800'}">
+                            ${escapeHTML(habit.title)}
+                        </p>
+                        <p class="text-[10px] font-medium mt-0.5 ${habit.completed ? 'text-emerald-600' : 'text-slate-400'}">
+                            <i class="fa-solid fa-fire text-amber-500 mr-0.5"></i> ${habit.streak}d streak
+                        </p>
+                    `;
+
+                    // Toggle habit on tap (ignore if delete button clicked)
+                    card.addEventListener('click', (e) => {
+                        if (e.target.closest('[data-delete-habit]')) {
+                            deleteHabit(habit.id);
+                            return;
+                        }
+                        toggleHabit(habit.id);
+                    });
+
+                    habitsContainer.appendChild(card);
+                });
+            }
+
+            /**
+             * Toggle Habit Completion
+             */
+            function toggleHabit(id) {
+                const habit = state.habits.find(h => h.id === id);
+                if (!habit) return;
+                habit.completed = !habit.completed;
+                habit.streak = habit.completed ? habit.streak + 1 : Math.max(0, habit.streak - 1);
+                saveState();
+                renderHabits();
+                updateProgress();
+                if (habit.completed) showToast('Habit completed!');
+            }
+
+            /**
+             * Delete Habit
+             */
+            function deleteHabit(id) {
+                state.habits = state.habits.filter(h => h.id !== id);
+                saveState();
+                renderHabits();
+                updateProgress();
+                showToast('Habit removed');
+            }
+
+            /**
+             * Helper for Category & Priority Styling Badges
+             */
+            function getCategoryBadge(category) {
+                const styles = {
+                    Personal: 'bg-indigo-50 text-indigo-600',
+                    Work: 'bg-sky-50 text-sky-600',
+                    Health: 'bg-emerald-50 text-emerald-600'
+                };
+                return styles[category] || 'bg-slate-100 text-slate-600';
+            }
+
+            function getPriorityBadge(priority) {
+                const styles = {
+                    High: 'bg-rose-50 text-rose-600 border-rose-100',
+                    Medium: 'bg-amber-50 text-amber-600 border-amber-100',
+                    Low: 'bg-slate-100 text-slate-500 border-slate-200/70'
+                };
+                return styles[priority] || styles.Low;
+            }
+
+            /**
+             * Render Filtered Task List
+             */
+            function renderTasks() {
+                const filtered = state.activeCategory === 'All'
+                    ? state.tasks
+                    : state.tasks.filter(t => t.category === state.activeCategory);
+
+                // Sort: incomplete tasks first, then by priority (High -> Medium -> Low)
+                const priorityWeight = { High: 3, Medium: 2, Low: 1 };
+                const sorted = [...filtered].sort((a, b) => {
+                    if (a.completed !== b.completed) return a.completed ? 1 : -1;
+                    return (priorityWeight[b.priority] || 0) - (priorityWeight[a.priority] || 0);
+                });
+
+                const remainingCount = filtered.filter(t => !t.completed).length;
+                taskCounter.textContent = `${remainingCount} left`;
+
+                tasksContainer.innerHTML = '';
+
+                if (sorted.length === 0) {
+                    emptyState.classList.remove('hidden');
+                    emptyState.classList.add('flex');
+                    return;
+                } else {
+                    emptyState.classList.add('hidden');
+                    emptyState.classList.remove('flex');
+                }
+
+                sorted.forEach(task => {
+                    const item = document.createElement('div');
+                    item.className = `task-enter bg-white p-3.5 rounded-2xl border transition-all duration-200 flex items-center gap-3 shadow-card ${
+                        task.completed ? 'border-slate-100 bg-slate-50/70' : 'border-slate-100 hover:border-slate-200'
+                    }`;
+
+                    item.innerHTML = `
+                        <button type="button" data-toggle-task="${task.id}" aria-label="Toggle task completion"
+                            class="w-7 h-7 rounded-xl border-2 flex items-center justify-center shrink-0 transition-all duration-200 active:scale-90 ${
+                                task.completed
+                                    ? 'bg-brand-600 border-brand-600 text-white animate-check-pop'
+                                    : 'border-slate-300 hover:border-brand-500 bg-white'
+                            }">
+                            <i class="fa-solid fa-check text-xs transition-transform duration-200 ${task.completed ? 'scale-100' : 'scale-0'}"></i>
+                        </button>
+
+                        <div class="flex-1 min-w-0 cursor-pointer" data-toggle-area="${task.id}">
+                            <p class="strike-text text-sm font-semibold truncate ${
+                                task.completed ? 'completed text-slate-400' : 'text-slate-800'
+                            }">
+                                ${escapeHTML(task.title)}
+                            </p>
+                            <div class="flex items-center gap-1.5 mt-1.5">
+                                <span class="text-[10px] font-semibold px-2 py-0.5 rounded-md ${getCategoryBadge(task.category)}">
+                                    ${escapeHTML(task.category)}
+                                </span>
+                                <span class="text-[10px] font-semibold px-2 py-0.5 rounded-md border ${getPriorityBadge(task.priority)}">
+                                    ${escapeHTML(task.priority)}
+                                </span>
+                            </div>
+                        </div>
+
+                        <button type="button" data-delete-task="${task.id}" aria-label="Delete task"
+                            class="w-8 h-8 rounded-xl text-slate-300 hover:text-rose-500 hover:bg-rose-50 active:scale-90 flex items-center justify-center transition shrink-0">
+                            <i class="fa-regular fa-trash-can text-xs"></i>
+                        </button>
+                    `;
+
+                    // Event listeners for toggle & delete
+                    const toggleBtn = item.querySelector(`[data-toggle-task="${task.id}"]`);
+                    const toggleArea = item.querySelector(`[data-toggle-area="${task.id}"]`);
+                    const deleteBtn = item.querySelector(`[data-delete-task="${task.id}"]`);
+
+                    toggleBtn.addEventListener('click', () => toggleTask(task.id));
+                    toggleArea.addEventListener('click', () => toggleTask(task.id));
+                    deleteBtn.addEventListener('click', () => deleteTask(task.id));
+
+                    tasksContainer.appendChild(item);
+                });
+            }
+
+            /**
+             * Toggle Task Completion
+             */
+            function toggleTask(id) {
+                const task = state.tasks.find(t => t.id === id);
+                if (!task) return;
+                task.completed = !task.completed;
+                saveState();
+                renderTasks();
+                updateProgress();
+            }
+
+            /**
+             * Delete Task
+             */
+            function deleteTask(id) {
+                state.tasks = state.tasks.filter(t => t.id !== id);
+                saveState();
+                renderTasks();
+                updateProgress();
+                showToast('Task deleted');
+            }
+
+            /**
+             * Clear all completed tasks
+             */
+            document.getElementById('clear-completed-btn').addEventListener('click', () => {
+                const completedCount = state.tasks.filter(t => t.completed).length;
+                if (completedCount === 0) {
+                    showToast('No completed tasks to clean up');
+                    return;
+                }
+                state.tasks = state.tasks.filter(t => !t.completed);
+                saveState();
+                renderTasks();
+                updateProgress();
+                showToast(`Cleared ${completedCount} completed task${completedCount > 1 ? 's' : ''}`);
+            });
+
+            /**
+             * Category Tab Switching
+             */
+            document.querySelectorAll('.cat-tab').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    state.activeCategory = btn.dataset.category;
+                    document.querySelectorAll('.cat-tab').forEach(tab => {
+                        tab.classList.remove('bg-white', 'text-slate-900', 'shadow-xs');
+                        tab.classList.add('text-slate-500');
+                    });
+                    btn.classList.add('bg-white', 'text-slate-900', 'shadow-xs');
+                    btn.classList.remove('text-slate-500');
+                    saveState();
+                    renderTasks();
+                });
+            });
+
+            /**
+             * Bottom Sheet Modal Controls
+             */
+            function openModal(modal) {
+                modalBackdrop.classList.remove('hidden');
+                modal.classList.remove('closed');
+                modal.classList.add('open');
+                const input = modal.querySelector('input[type="text"]');
+                if (input) setTimeout(() => input.focus(), 150);
+            }
+
+            function closeAllModals() {
+                modalBackdrop.classList.add('hidden');
+                [taskModal, habitModal].forEach(m => {
+                    m.classList.remove('open');
+                    m.classList.add('closed');
+                });
+            }
+
+            document.getElementById('open-task-modal-btn').addEventListener('click', () => openModal(taskModal));
+            document.getElementById('open-habit-modal-btn').addEventListener('click', () => openModal(habitModal));
+            modalBackdrop.addEventListener('click', closeAllModals);
+            document.querySelectorAll('.close-modal-btn').forEach(btn => {
+                btn.addEventListener('click', closeAllModals);
+            });
+
+            /**
+             * Handle Add Task Form Submission
+             */
+            taskForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const titleInput = document.getElementById('task-title');
+                const title = titleInput.value.trim();
+                if (!title) return;
+
+                const category = taskForm.querySelector('input[name="task-category"]:checked').value;
+                const priority = taskForm.querySelector('input[name="task-priority"]:checked').value;
+
+                const newTask = {
+                    id: 't_' + Date.now(),
+                    title,
+                    category,
+                    priority,
+                    completed: false
+                };
+
+                state.tasks.unshift(newTask);
+                saveState();
+                renderTasks();
+                updateProgress();
+                taskForm.reset();
+                closeAllModals();
+                showToast('Task added!');
+            });
+
+            /**
+             * Handle Add Habit Form Submission
+             */
+            habitForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const titleInput = document.getElementById('habit-title');
+                const title = titleInput.value.trim();
+                if (!title) return;
+
+                const icon = habitForm.querySelector('input[name="habit-icon"]:checked').value;
+
+                const newHabit = {
+                    id: 'h_' + Date.now(),
+                    title,
+                    icon,
+                    completed: false,
+                    streak: 0
+                };
+
+                state.habits.push(newHabit);
+                saveState();
+                renderHabits();
+                updateProgress();
+                habitForm.reset();
+                closeAllModals();
+                showToast('Habit added!');
+            });
+
+            /**
+             * Escape HTML to prevent XSS on user input
+             */
+            function escapeHTML(str) {
+                const div = document.createElement('div');
+                div.textContent = str;
+                return div.innerHTML;
+            }
+
+            /**
+             * Sync active category tab UI on initial load
+             */
+            function syncCategoryTabsUI() {
+                document.querySelectorAll('.cat-tab').forEach(tab => {
+                    if (tab.dataset.category === state.activeCategory) {
+                        tab.classList.add('bg-white', 'text-slate-900', 'shadow-xs');
+                        tab.classList.remove('text-slate-500');
+                    } else {
+                        tab.classList.remove('bg-white', 'text-slate-900', 'shadow-xs');
+                        tab.classList.add('text-slate-500');
+                    }
+                });
+            }
+
+            // Initialize App
+            updateDateTime();
+            setInterval(updateDateTime, 30000);
+            syncCategoryTabsUI();
+            renderHabits();
+            renderTasks();
+            updateProgress();
+        })();
+    </script>
+</body>
+</html>
